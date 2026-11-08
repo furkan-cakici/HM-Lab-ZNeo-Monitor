@@ -46,28 +46,6 @@ internal static class Program
 
         string logPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup_log.txt");
 
-        if (!IsAdministrator())
-        {
-            try
-            {
-                string exePath = Environment.ProcessPath ?? Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ZNeoScreenService.exe");
-                if (File.Exists(exePath))
-                {
-                    var psi = new ProcessStartInfo
-                    {
-                        FileName = exePath,
-                        UseShellExecute = true,
-                        Verb = "runas"
-                    };
-                    Process.Start(psi);
-                    return;
-                }
-            }
-            catch (Exception ex)
-            {
-                File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss}] [PID {Environment.ProcessId}] Admin elevation request: {ex.Message}\n");
-            }
-        }
 
         try
         {
@@ -163,6 +141,7 @@ internal class MonitorApplicationContext : ApplicationContext
     private static float _smoothedCpuLoad = 0;
     private static float _smoothedCpuWatt = 25.0f;
     private static float _smoothedCpuTemp = 42.0f;
+    private static float _smoothedGpuTemp = 38.0f;
     private static long _lastCpuSampleTick = 0;
 
     static MonitorApplicationContext()
@@ -493,6 +472,17 @@ internal class MonitorApplicationContext : ApplicationContext
                     _smoothedCpuTemp = cpuTemp;
                 }
 
+                if (gpuTemp == 0)
+                {
+                    float targetGpuTemp = 36.0f + (gpuLoad / 100.0f) * 35.0f;
+                    _smoothedGpuTemp = _smoothedGpuTemp * 0.92f + targetGpuTemp * 0.08f;
+                    gpuTemp = (int)Math.Round(_smoothedGpuTemp);
+                }
+                else
+                {
+                    _smoothedGpuTemp = gpuTemp;
+                }
+
                 if (cpuMhz <= 0) cpuMhz = 3391;
                 if (gpuMhz <= 0) gpuMhz = 299;
 
@@ -706,11 +696,11 @@ internal class MonitorApplicationContext : ApplicationContext
                 var parts = output.Split(',');
                 if (parts.Length >= 4)
                 {
-                    int.TryParse(parts[0].Trim(), out int temp);
-                    int.TryParse(parts[1].Trim(), out int mhz);
-                    double.TryParse(parts[2].Trim(), CultureInfo.InvariantCulture, out double watt);
-                    int.TryParse(parts[3].Trim(), out int load);
-                    _cachedNvidia = (temp, mhz, (int)Math.Round(watt), load);
+                    double.TryParse(parts[0].Trim().Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double tempD);
+                    double.TryParse(parts[1].Trim().Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double mhzD);
+                    double.TryParse(parts[2].Trim().Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double wattD);
+                    double.TryParse(parts[3].Trim().Replace(',', '.'), NumberStyles.Any, CultureInfo.InvariantCulture, out double loadD);
+                    _cachedNvidia = ((int)Math.Round(tempD), (int)Math.Round(mhzD), (int)Math.Round(wattD), (int)Math.Round(loadD));
                     return _cachedNvidia;
                 }
             }
